@@ -64,6 +64,10 @@ def evaluate(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
     }
 
 
+# Numerical stability offset added before log() and division to avoid log(0)/div-by-zero
+_OFFSET = 1.0
+
+
 def build_symbolic_features(X: pd.DataFrame) -> pd.DataFrame:
     """Create 45 candidate symbolic features from 5 raw AE parameters."""
     cols = list(X.columns)
@@ -71,15 +75,15 @@ def build_symbolic_features(X: pd.DataFrame) -> pd.DataFrame:
     for col in cols:
         v = X[col].values.astype(float)
         Xf[col] = v
-        Xf[f"log_{col}"] = np.log(v + 1.0)
+        Xf[f"log_{col}"] = np.log(v + _OFFSET)
         Xf[f"sqrt_{col}"] = np.sqrt(v)
         Xf[f"{col}_sq"] = v ** 2
-        Xf[f"{col}_inv"] = 1.0 / (v + 1.0)
+        Xf[f"{col}_inv"] = _OFFSET / (v + _OFFSET)
     for i, c1 in enumerate(cols):
         for c2 in cols[i + 1:]:
             v1, v2 = X[c1].values.astype(float), X[c2].values.astype(float)
             Xf[f"{c1}x{c2}"] = v1 * v2
-            Xf[f"{c1}_div_{c2}"] = v1 / (v2 + 1.0)
+            Xf[f"{c1}_div_{c2}"] = v1 / (v2 + _OFFSET)
     return pd.DataFrame(Xf)
 
 
@@ -216,10 +220,10 @@ def main() -> None:
         "Linear Regression": lambda: LinearRegression(),
         "Support Vector Regression": lambda: SVR(kernel="rbf", C=10, epsilon=0.05, gamma="scale"),
         "Random Forest": lambda: RandomForestRegressor(
-            n_estimators=200, max_depth=14, min_samples_leaf=5, random_state=42, n_jobs=-1
+            n_estimators=300, max_depth=14, min_samples_leaf=5, random_state=42, n_jobs=-1
         ),
         "Gradient Boosting": lambda: GradientBoostingRegressor(
-            n_estimators=200, learning_rate=0.03, max_depth=4, subsample=0.9,
+            n_estimators=300, learning_rate=0.03, max_depth=4, subsample=0.9,
             min_samples_leaf=5, random_state=42
         ),
     }
@@ -234,7 +238,7 @@ def main() -> None:
         sc = RobustScaler()
         Xtr_cv = sc.fit_transform(Xf.values[tr_i])
         Xts_cv = sc.transform(Xf.values[ts_i])
-        m = LassoCV(cv=5, max_iter=20000, random_state=42, n_jobs=-1, alphas=np.logspace(-6, 0, 40))
+        m = LassoCV(cv=10, max_iter=30000, random_state=42, n_jobs=-1, alphas=np.logspace(-6, 0, 60))
         m.fit(Xtr_cv, y.values[tr_i])
         sr_cv_scores.append(r2_score(y.values[ts_i], m.predict(Xts_cv)))
     sr_cv_mean = float(np.mean(sr_cv_scores))
