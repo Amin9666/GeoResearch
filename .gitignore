@@ -1,0 +1,22 @@
+# macOS
+.DS_Store
+
+# Python environments
+.env/
+.venv/
+.venv-*/
+venv/
+
+# Python cache/build artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+
+# Local editor settings
+.vscode/
+
+# Generated outputs
+outputs/
