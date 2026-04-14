@@ -37,6 +37,7 @@ import pandas as pd
 import seaborn as sns
 from scipy.stats import probplot
 from sklearn.datasets import load_iris
+from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LassoCV, LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
@@ -90,6 +91,21 @@ def build_symbolic_features(X: pd.DataFrame) -> pd.DataFrame:
             Xf[f"{c1}_div_{c2}"] = v1 / (v2 + _OFFSET)
             Xf[f"{c2}_div_{c1}"] = v2 / (v1 + _OFFSET)
     return pd.DataFrame(Xf)
+
+
+class SymbolicFeatureTransformer(BaseEstimator, TransformerMixin):
+    """Sklearn-compatible transformer that applies build_symbolic_features."""
+
+    def fit(self, X, y=None):  # noqa: N803
+        self._feature_names = [f"f{i}" for i in range(X.shape[1])]
+        return self
+
+    def transform(self, X, y=None):  # noqa: N803
+        df = pd.DataFrame(X, columns=self._feature_names)
+        result = build_symbolic_features(df).values
+        # Replace any NaN/inf produced by feature engineering with 0
+        result = np.where(np.isfinite(result), result, 0.0)
+        return result
 
 
 # ---------------------------------------------------------------------------
@@ -441,8 +457,9 @@ def main() -> None:
         ("model", MLPRegressor(hidden_layer_sizes=(64, 32), max_iter=500, random_state=42)),
     ])
 
-    # For SR, build combined pipeline using raw features only (LassoCV with raw features approximation)
+    # For SR, build a pipeline that applies feature engineering then scales and fits LassoCV
     pipe_sr_lc = Pipeline([
+        ("engineer", SymbolicFeatureTransformer()),
         ("scaler", RobustScaler()),
         ("model", LassoCV(cv=5, max_iter=5000, random_state=42, alphas=np.logspace(-6, 1, 40))),
     ])

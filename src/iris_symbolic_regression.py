@@ -2,7 +2,8 @@
 Symbolic Regression via LassoCV on Engineered Features — Iris Regression Task.
 
 Predict petal_length (cm) from sepal_length, sepal_width, petal_width.
-Builds 21 engineered features, then uses LassoCV to discover a sparse formula.
+Builds 24 engineered features (15 unary + 3 products + 6 bidirectional ratios),
+then uses LassoCV to discover a sparse formula.
 
 Outputs:
   outputs/figures/iris_sr_actual_vs_predicted.png
