@@ -54,9 +54,7 @@ def main() -> None:
 
     sns.set_style("whitegrid")
 
-    # ------------------------------------------------------------------
-    # 1. Load data
-    # ------------------------------------------------------------------
+
     iris = load_iris(as_frame=True)
     df = iris.frame.copy()
     df.columns = [c.replace(" (cm)", "").replace(" ", "_") for c in df.columns]
@@ -68,44 +66,29 @@ def main() -> None:
     X = df[feature_cols]
     y = df[target_col]
 
-    # ------------------------------------------------------------------
-    # 2. Train/test split
-    # ------------------------------------------------------------------
+
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42
     )
 
-    # ------------------------------------------------------------------
-    # 3. Scale with StandardScaler
-    # ------------------------------------------------------------------
+
     scaler = StandardScaler()
     X_train_s = scaler.fit_transform(X_train)
     X_test_s = scaler.transform(X_test)
-
-    # ------------------------------------------------------------------
     # 4. Train Linear Regression
-    # ------------------------------------------------------------------
     model = LinearRegression()
     model.fit(X_train_s, y_train)
     y_pred = model.predict(X_test_s)
-
-    # ------------------------------------------------------------------
     # 5. Evaluate
-    # ------------------------------------------------------------------
     metrics = evaluate(y_test.values, y_pred)
     print(f"Linear Regression: R²={metrics['R2']:.4f}, RMSE={metrics['RMSE']:.4f}, MAE={metrics['MAE']:.4f}")
-
-    # ------------------------------------------------------------------
     # 6. 10-fold cross-validation
-    # ------------------------------------------------------------------
     pipe = Pipeline([("scaler", StandardScaler()), ("model", LinearRegression())])
     kf = KFold(n_splits=10, shuffle=True, random_state=42)
     cv_scores = cross_val_score(pipe, X, y, cv=kf, scoring="r2")
     print(f"CV R²: {cv_scores.mean():.4f} ± {cv_scores.std():.4f}")
 
-    # ------------------------------------------------------------------
     # 7. Plots
-    # ------------------------------------------------------------------
     residuals = y_test.values - y_pred
     vmin = min(y_test.min(), y_pred.min())
     vmax = max(y_test.max(), y_pred.max())
