@@ -87,10 +87,7 @@ def main() -> None:
         d.mkdir(parents=True, exist_ok=True)
 
     sns.set_style("whitegrid")
-
-    # ------------------------------------------------------------------
     # 1. Load data
-    # ------------------------------------------------------------------
     iris = load_iris(as_frame=True)
     df = iris.frame.copy()
     df.columns = [c.replace(" (cm)", "").replace(" ", "_") for c in df.columns]
@@ -101,16 +98,12 @@ def main() -> None:
     X = df[feature_cols]
     y = df[target_col]
 
-    # ------------------------------------------------------------------
     # 2. Build engineered feature matrix
-    # ------------------------------------------------------------------
     Xf = build_symbolic_features(X)
     feature_names = list(Xf.columns)
     print(f"Engineered features: {len(feature_names)}")
 
-    # ------------------------------------------------------------------
     # 3. 80/20 split
-    # ------------------------------------------------------------------
     idx = np.arange(len(y))
     idx_train, idx_test = train_test_split(idx, test_size=0.2, random_state=42)
 
@@ -118,38 +111,27 @@ def main() -> None:
     X_test = Xf.values[idx_test]
     y_train = y.values[idx_train]
     y_test = y.values[idx_test]
-
-    # ------------------------------------------------------------------
     # 4. Scale with RobustScaler
-    # ------------------------------------------------------------------
     scaler = RobustScaler()
     X_train_s = scaler.fit_transform(X_train)
     X_test_s = scaler.transform(X_test)
 
-    # ------------------------------------------------------------------
     # 5. Train LassoCV
-    # ------------------------------------------------------------------
     alphas = np.logspace(-6, 1, 80)
     model = LassoCV(cv=10, max_iter=50000, random_state=42, alphas=alphas)
     model.fit(X_train_s, y_train)
     y_pred = model.predict(X_test_s)
 
-    # ------------------------------------------------------------------
     # 6. Evaluate
-    # ------------------------------------------------------------------
     metrics = evaluate(y_test, y_pred)
     print(f"Symbolic Regression: R²={metrics['R2']:.4f}, RMSE={metrics['RMSE']:.4f}, MAE={metrics['MAE']:.4f}")
 
-    # ------------------------------------------------------------------
     # 7. Extract non-zero coefficients → symbolic formula
-    # ------------------------------------------------------------------
     coef = pd.Series(model.coef_, index=feature_names)
     nz_coef = coef[coef != 0].sort_values(key=abs, ascending=False)
     intercept = float(model.intercept_)
 
-    # ------------------------------------------------------------------
     # 8. Plots
-    # ------------------------------------------------------------------
     residuals = y_test - y_pred
     vmin = min(y_test.min(), y_pred.min())
     vmax = max(y_test.max(), y_pred.max())
@@ -238,9 +220,7 @@ def main() -> None:
                                   "Best_Alpha": model.alpha_, "N_Terms": len(nz_coef)}])
     metrics_df.to_csv(out_csv / "iris_sr_metrics.csv", index=False)
 
-    # ------------------------------------------------------------------
     # 10. Print summary
-    # ------------------------------------------------------------------
     print("\n" + "=" * 60)
     print("SYMBOLIC REGRESSION (LassoCV) — IRIS REGRESSION SUMMARY")
     print("=" * 60)
