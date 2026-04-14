@@ -47,12 +47,12 @@ def evaluate(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
 
 
 def build_symbolic_features(X: pd.DataFrame) -> pd.DataFrame:
-    """Build 21 engineered features from 3 raw features.
+    """Build 24 engineered features from 3 raw features.
 
     Unary (5 per feature × 3 = 15): raw, log(x+1), sqrt(x), x², 1/(x+1)
     Pairwise products (3 pairs × 1 = 3): x1*x2
     Pairwise ratios (3 pairs × 2 directions = 6): x1/(x2+1)
-    Total: 15 + 3 + 6 = 24 features (some implementations vary slightly)
+    Total: 15 + 3 + 6 = 24 features
     """
     cols = list(X.columns)
     Xf: dict[str, np.ndarray] = {}

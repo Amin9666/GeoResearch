@@ -29,6 +29,7 @@ from sklearn.datasets import load_iris
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import KFold, cross_val_score, train_test_split
+from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 warnings.filterwarnings("ignore")
@@ -97,7 +98,6 @@ def main() -> None:
     # ------------------------------------------------------------------
     # 6. 10-fold cross-validation
     # ------------------------------------------------------------------
-    from sklearn.pipeline import Pipeline
     pipe = Pipeline([("scaler", StandardScaler()), ("model", LinearRegression())])
     kf = KFold(n_splits=10, shuffle=True, random_state=42)
     cv_scores = cross_val_score(pipe, X, y, cv=kf, scoring="r2")
