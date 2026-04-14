@@ -5,18 +5,10 @@ vs Random Forest vs MLP Regressor on the Iris Regression Task.
 Predict petal_length (cm) from sepal_length, sepal_width, petal_width.
 
 Outputs (outputs/figures/):
-  iris_comparison_metrics_bar.png
-  iris_comparison_actual_vs_predicted.png
-  iris_comparison_residuals_scatter.png
-  iris_comparison_residuals_hist.png
-  iris_comparison_error_distribution_boxplot.png
-  iris_comparison_cv_r2_bar.png
-  iris_comparison_cv_r2_violin.png
-  iris_comparison_feature_distributions.png
-  iris_comparison_pairplot.png
-  iris_comparison_prediction_error_vs_actual.png
-  iris_comparison_qq_residuals.png
-  iris_comparison_learning_curves.png
+  iris_comparison_metrics_bar.png          – R², RMSE, MAE for all models
+  iris_comparison_actual_vs_predicted.png  – 2×2 actual vs predicted
+  iris_comparison_error_distribution_boxplot.png – absolute error spread
+  iris_comparison_cv_r2_bar.png            – 10-fold CV R² with error bars
 
 Outputs (outputs/csv/):
   iris_comparison_metrics.csv
@@ -35,13 +27,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from scipy.stats import probplot
 from sklearn.datasets import load_iris
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LassoCV, LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from sklearn.model_selection import KFold, cross_val_score, learning_curve, train_test_split
+from sklearn.model_selection import KFold, cross_val_score, train_test_split
 from sklearn.neural_network import MLPRegressor
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import RobustScaler, StandardScaler
@@ -116,8 +107,7 @@ def main() -> None:
     root = Path(__file__).resolve().parents[1]
     out_fig = root / "outputs" / "figures"
     out_csv = root / "outputs" / "csv"
-    out_mdl = root / "outputs" / "models"
-    for d in (out_fig, out_csv, out_mdl):
+    for d in (out_fig, out_csv):
         d.mkdir(parents=True, exist_ok=True)
 
     sns.set_style("whitegrid")
@@ -128,11 +118,9 @@ def main() -> None:
     iris = load_iris(as_frame=True)
     df = iris.frame.copy()
     df.columns = [c.replace(" (cm)", "").replace(" ", "_") for c in df.columns]
-    species_labels = [iris.target_names[t] for t in df["target"]]
 
     feature_cols = ["sepal_length", "sepal_width", "petal_width"]
     target_col = "petal_length"
-    all_feature_cols = ["sepal_length", "sepal_width", "petal_length", "petal_width"]
 
     X = df[feature_cols]
     y = df[target_col]
@@ -303,38 +291,7 @@ def main() -> None:
     fig.savefig(out_fig / "iris_comparison_actual_vs_predicted.png", dpi=300, bbox_inches="tight")
     plt.close(fig)
 
-    # --- (c) 2×2 Residuals vs Predicted scatter ---
-    fig, axes = plt.subplots(2, 2, figsize=(12, 9))
-    for ax, name in zip(axes.flat, MODEL_NAMES):
-        y_pred = predictions[name]
-        res = y_test_np - y_pred
-        ax.scatter(y_pred, res, alpha=0.6, s=30, color=PALETTE[name],
-                   edgecolors="white", linewidths=0.4)
-        ax.axhline(0, color="black", linestyle="--", linewidth=1.5)
-        ax.set_title(name, fontsize=11)
-        ax.set_xlabel("Predicted (cm)")
-        ax.set_ylabel("Residual")
-    fig.suptitle("Iris Regression — Residuals vs Predicted (All Models)", fontsize=14)
-    fig.tight_layout()
-    fig.savefig(out_fig / "iris_comparison_residuals_scatter.png", dpi=300, bbox_inches="tight")
-    plt.close(fig)
-
-    # --- (d) Overlaid residuals histogram ---
-    fig, ax = plt.subplots(figsize=(10, 6))
-    for name in MODEL_NAMES:
-        res = y_test_np - predictions[name]
-        ax.hist(res, bins=20, alpha=0.45, density=True, label=name, color=PALETTE[name])
-        sns.kdeplot(res, ax=ax, color=PALETTE[name], linewidth=1.5)
-    ax.axvline(0, color="black", linestyle="--", linewidth=1.5)
-    ax.set_xlabel("Residual (Actual − Predicted, cm)", fontsize=12)
-    ax.set_ylabel("Density", fontsize=12)
-    ax.set_title("Iris Regression — Residual Distributions (All Models)", fontsize=13)
-    ax.legend(fontsize=10)
-    fig.tight_layout()
-    fig.savefig(out_fig / "iris_comparison_residuals_hist.png", dpi=300, bbox_inches="tight")
-    plt.close(fig)
-
-    # --- (e) Boxplot of absolute errors ---
+    # --- (c) Boxplot of absolute errors ---
     abs_errors = {name: np.abs(y_test_np - predictions[name]) for name in MODEL_NAMES}
     fig, ax = plt.subplots(figsize=(9, 6))
     bp = ax.boxplot(
@@ -354,7 +311,7 @@ def main() -> None:
     fig.savefig(out_fig / "iris_comparison_error_distribution_boxplot.png", dpi=300, bbox_inches="tight")
     plt.close(fig)
 
-    # --- (f) CV R² bar chart with error bars ---
+    # --- (d) CV R² bar chart with error bars ---
     fig, ax = plt.subplots(figsize=(9, 5))
     bar_colors = [PALETTE[m] for m in cv_df["Model"]]
     bars = ax.bar(cv_df["Model"], cv_df["CV_R2_mean"], yerr=cv_df["CV_R2_std"],
@@ -371,131 +328,8 @@ def main() -> None:
     fig.savefig(out_fig / "iris_comparison_cv_r2_bar.png", dpi=300, bbox_inches="tight")
     plt.close(fig)
 
-    # --- (g) Violin plot of 10-fold CV R² scores ---
-    cv_df_long = pd.DataFrame({
-        name: cv_all[name] for name in MODEL_NAMES
-    })
-    cv_df_melt = cv_df_long.melt(var_name="Model", value_name="CV R²")
-
-    fig, ax = plt.subplots(figsize=(9, 6))
-    sns.violinplot(
-        data=cv_df_melt, x="Model", y="CV R²", ax=ax,
-        palette=PALETTE, inner="quartile", cut=0,
-    )
-    ax.set_title("Iris Regression — CV R² Violin Plot (10 Folds)", fontsize=13)
-    ax.set_xlabel("Model", fontsize=12)
-    ax.set_ylabel("CV R²", fontsize=12)
-    ax.tick_params(axis="x", rotation=20)
-    fig.tight_layout()
-    fig.savefig(out_fig / "iris_comparison_cv_r2_violin.png", dpi=300, bbox_inches="tight")
-    plt.close(fig)
-
-    # --- (h) KDE distributions of 3 input features coloured by species ---
-    species_col = pd.Series(species_labels, index=df.index, name="species")
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-    species_colors = {"setosa": "#E74C3C", "versicolor": "#3498DB", "virginica": "#2ECC71"}
-    for ax, feat in zip(axes, feature_cols):
-        for sp, grp in df.groupby(species_col):
-            sns.kdeplot(grp[feat], ax=ax, label=sp, color=species_colors.get(sp, "grey"),
-                        linewidth=2, fill=True, alpha=0.25)
-        ax.set_title(f"{feat} distribution", fontsize=11)
-        ax.set_xlabel(f"{feat} (cm)", fontsize=10)
-        ax.set_ylabel("Density", fontsize=10)
-        ax.legend(fontsize=9)
-    fig.suptitle("Iris — Input Feature KDE Distributions by Species", fontsize=13)
-    fig.tight_layout()
-    fig.savefig(out_fig / "iris_comparison_feature_distributions.png", dpi=300, bbox_inches="tight")
-    plt.close(fig)
-
-    # --- (i) Pairplot coloured by species ---
-    df_plot = df[all_feature_cols].copy()
-    df_plot["species"] = species_labels
-    pair_palette = {"setosa": "#E74C3C", "versicolor": "#3498DB", "virginica": "#2ECC71"}
-    pairfig = sns.pairplot(df_plot, hue="species", palette=pair_palette, plot_kws={"alpha": 0.5, "s": 20})
-    pairfig.figure.suptitle("Iris — Pairplot of All Features by Species", y=1.02, fontsize=13)
-    pairfig.savefig(out_fig / "iris_comparison_pairplot.png", dpi=300, bbox_inches="tight")
-    plt.close(pairfig.figure)
-
-    # --- (j) abs_error vs y_actual, all models overlaid ---
-    fig, ax = plt.subplots(figsize=(9, 6))
-    for name in MODEL_NAMES:
-        abs_err = np.abs(y_test_np - predictions[name])
-        ax.scatter(y_test_np, abs_err, alpha=0.5, s=25, color=PALETTE[name], label=name)
-    ax.set_xlabel("Actual petal_length (cm)", fontsize=12)
-    ax.set_ylabel("Absolute Error (cm)", fontsize=12)
-    ax.set_title("Iris Regression — Prediction Error vs Actual (All Models)", fontsize=13)
-    ax.legend(fontsize=10)
-    fig.tight_layout()
-    fig.savefig(out_fig / "iris_comparison_prediction_error_vs_actual.png", dpi=300, bbox_inches="tight")
-    plt.close(fig)
-
-    # --- (k) Q-Q plots of residuals (2×2) ---
-    fig, axes = plt.subplots(2, 2, figsize=(11, 9))
-    for ax, name in zip(axes.flat, MODEL_NAMES):
-        res = y_test_np - predictions[name]
-        (osm, osr), (slope, intercept_qq, r_val) = probplot(res, dist="norm")
-        ax.scatter(osm, osr, s=20, alpha=0.7, color=PALETTE[name])
-        ax.plot(osm, slope * np.array(osm) + intercept_qq, color="black",
-                linewidth=1.5, linestyle="--", label="Normal line")
-        ax.set_title(f"{name} — Q-Q Plot of Residuals", fontsize=10)
-        ax.set_xlabel("Theoretical Quantiles")
-        ax.set_ylabel("Sample Quantiles")
-        ax.legend(fontsize=8)
-    fig.suptitle("Iris Regression — Q-Q Plots of Residuals (All Models)", fontsize=13)
-    fig.tight_layout()
-    fig.savefig(out_fig / "iris_comparison_qq_residuals.png", dpi=300, bbox_inches="tight")
-    plt.close(fig)
-
-    # --- (l) Learning curves for all 4 models ---
-    train_sizes_frac = np.linspace(0.1, 1.0, 10)
-    lc_kf = KFold(n_splits=5, shuffle=True, random_state=42)
-
-    pipe_lr_lc = Pipeline([("scaler", StandardScaler()), ("model", LinearRegression())])
-    pipe_rf_lc = Pipeline([("model", RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1))])
-    pipe_mlp_lc = Pipeline([
-        ("scaler", StandardScaler()),
-        ("model", MLPRegressor(hidden_layer_sizes=(64, 32), max_iter=500, random_state=42)),
-    ])
-
-    # For SR, build a pipeline that applies feature engineering then scales and fits LassoCV
-    pipe_sr_lc = Pipeline([
-        ("engineer", SymbolicFeatureTransformer()),
-        ("scaler", RobustScaler()),
-        ("model", LassoCV(cv=5, max_iter=5000, random_state=42, alphas=np.logspace(-6, 1, 40))),
-    ])
-
-    lc_models = {
-        "Linear Regression": pipe_lr_lc,
-        "Symbolic Regression": pipe_sr_lc,
-        "Random Forest": pipe_rf_lc,
-        "MLP": pipe_mlp_lc,
-    }
-
-    fig, ax = plt.subplots(figsize=(10, 7))
-    for name, pipe_lc in lc_models.items():
-        train_sz, train_sc, val_sc = learning_curve(
-            pipe_lc, X, y, cv=lc_kf,
-            train_sizes=train_sizes_frac,
-            scoring="r2", n_jobs=-1,
-        )
-        train_mean = train_sc.mean(axis=1)
-        val_mean = val_sc.mean(axis=1)
-        val_std = val_sc.std(axis=1)
-        color = PALETTE[name]
-        ax.plot(train_sz, train_mean, "--", color=color, linewidth=1.5, alpha=0.7)
-        ax.plot(train_sz, val_mean, "-", color=color, linewidth=2, label=name)
-        ax.fill_between(train_sz, val_mean - val_std, val_mean + val_std, alpha=0.12, color=color)
-
-    ax.set_xlabel("Training Set Size", fontsize=12)
-    ax.set_ylabel("R² Score", fontsize=12)
-    ax.set_title("Iris Regression — Learning Curves (solid=CV, dashed=Train)", fontsize=13)
-    ax.legend(fontsize=10)
-    fig.tight_layout()
-    fig.savefig(out_fig / "iris_comparison_learning_curves.png", dpi=300, bbox_inches="tight")
-    plt.close(fig)
-
     # ------------------------------------------------------------------
-    # 9. Final summary
+    # 8. Final summary
     # ------------------------------------------------------------------
     print("\n" + "=" * 70)
     print("IRIS REGRESSION COMPARISON — HOLD-OUT TEST RESULTS")
