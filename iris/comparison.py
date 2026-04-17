@@ -1,8 +1,11 @@
 """
-Master Comparison: Linear Regression vs Symbolic Regression (LassoCV)
+Master Comparison: Linear Regression vs Symbolic Regression (PySR)
 vs Random Forest vs MLP Regressor on the Iris Regression Task.
 
 Predict petal_length (cm) from sepal_length, sepal_width, petal_width.
+
+NOTE: PySR requires Julia to be installed on your system.
+See the README for Julia setup instructions.
 
 Outputs (outputs/figures/):
   iris_comparison_metrics_bar.png          – R², RMSE, MAE for all models
@@ -27,15 +30,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from pysr import PySRRegressor
 from sklearn.datasets import load_iris
-from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.linear_model import LassoCV, LinearRegression
+from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import KFold, cross_val_score, train_test_split
 from sklearn.neural_network import MLPRegressor
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import RobustScaler, StandardScaler
+from sklearn.preprocessing import StandardScaler
 
 warnings.filterwarnings("ignore")
 
@@ -48,8 +51,6 @@ PALETTE = {
 }
 MODEL_NAMES = list(PALETTE.keys())
 
-_OFFSET = 1.0
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -61,42 +62,6 @@ def evaluate(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
         "RMSE": float(np.sqrt(mean_squared_error(y_true, y_pred))),
         "MAE": float(mean_absolute_error(y_true, y_pred)),
     }
-
-
-def build_symbolic_features(X: pd.DataFrame) -> pd.DataFrame:
-    """Build engineered features for symbolic regression (same as iris_symbolic_regression.py)."""
-    cols = list(X.columns)
-    Xf: dict[str, np.ndarray] = {}
-    for col in cols:
-        v = X[col].values.astype(float)
-        Xf[col] = v
-        Xf[f"log_{col}"] = np.log(v + _OFFSET)
-        Xf[f"sqrt_{col}"] = np.sqrt(np.abs(v))
-        Xf[f"{col}_sq"] = v ** 2
-        Xf[f"{col}_inv"] = _OFFSET / (v + _OFFSET)
-    for i, c1 in enumerate(cols):
-        for c2 in cols[i + 1:]:
-            v1 = X[c1].values.astype(float)
-            v2 = X[c2].values.astype(float)
-            Xf[f"{c1}x{c2}"] = v1 * v2
-            Xf[f"{c1}_div_{c2}"] = v1 / (v2 + _OFFSET)
-            Xf[f"{c2}_div_{c1}"] = v2 / (v1 + _OFFSET)
-    return pd.DataFrame(Xf)
-
-
-class SymbolicFeatureTransformer(BaseEstimator, TransformerMixin):
-    """Sklearn-compatible transformer that applies build_symbolic_features."""
-
-    def fit(self, X, y=None):  # noqa: N803
-        self._feature_names = [f"f{i}" for i in range(X.shape[1])]
-        return self
-
-    def transform(self, X, y=None):  # noqa: N803
-        df = pd.DataFrame(X, columns=self._feature_names)
-        result = build_symbolic_features(df).values
-        # Replace any NaN/inf produced by feature engineering with 0
-        result = np.where(np.isfinite(result), result, 0.0)
-        return result
 
 
 # ---------------------------------------------------------------------------
@@ -135,19 +100,8 @@ def main() -> None:
     y_test_np = y_test.values
 
     # ------------------------------------------------------------------
-    # 3. Build symbolic features for SR
+    # 3. Scale raw features for LR and MLP
     # ------------------------------------------------------------------
-    Xf = build_symbolic_features(X)
-    idx_train_bool = X_train.index
-    idx_test_bool = X_test.index
-    Xf_train = Xf.loc[idx_train_bool].values
-    Xf_test = Xf.loc[idx_test_bool].values
-
-    scaler_sr = RobustScaler()
-    Xf_train_s = scaler_sr.fit_transform(Xf_train)
-    Xf_test_s = scaler_sr.transform(Xf_test)
-
-    # Scaled raw features for LR and MLP
     scaler_std = StandardScaler()
     X_train_std = scaler_std.fit_transform(X_train)
     X_test_std = scaler_std.transform(X_test)
@@ -162,11 +116,16 @@ def main() -> None:
     lr.fit(X_train_std, y_train_np)
     y_pred_lr = lr.predict(X_test_std)
 
-    # Symbolic Regression (LassoCV)
-    alphas = np.logspace(-6, 1, 80)
-    sr = LassoCV(cv=10, max_iter=50000, random_state=42, alphas=alphas)
-    sr.fit(Xf_train_s, y_train_np)
-    y_pred_sr = sr.predict(Xf_test_s)
+    # Symbolic Regression (PySR — true symbolic regression)
+    sr = PySRRegressor(
+        niterations=40,
+        binary_operators=["+", "-", "*", "/"],
+        unary_operators=["sqrt", "log", "square"],
+        random_state=42,
+        verbosity=0,
+    )
+    sr.fit(X_train.values, y_train_np)
+    y_pred_sr = sr.predict(X_test.values)
 
     # Random Forest
     rf = RandomForestRegressor(n_estimators=200, max_depth=None, random_state=42, n_jobs=-1)
@@ -216,19 +175,18 @@ def main() -> None:
     cv_scores_rf = cross_val_score(pipe_rf, X, y, cv=kf, scoring="r2")
     cv_scores_mlp = cross_val_score(pipe_mlp, X, y, cv=kf, scoring="r2")
 
-    # SR CV (manual, needs feature engineering inside each fold)
+    # SR CV (manual 10-fold, PySR doesn't integrate with cross_val_score)
     cv_scores_sr = []
     for tr_idx, ts_idx in kf.split(X.values):
-        X_tr_raw = pd.DataFrame(X.values[tr_idx], columns=feature_cols)
-        X_ts_raw = pd.DataFrame(X.values[ts_idx], columns=feature_cols)
-        Xf_tr = build_symbolic_features(X_tr_raw).values
-        Xf_ts = build_symbolic_features(X_ts_raw).values
-        sc = RobustScaler()
-        Xf_tr_s = sc.fit_transform(Xf_tr)
-        Xf_ts_s = sc.transform(Xf_ts)
-        m_cv = LassoCV(cv=5, max_iter=10000, random_state=42, alphas=np.logspace(-6, 1, 40))
-        m_cv.fit(Xf_tr_s, y.values[tr_idx])
-        cv_scores_sr.append(r2_score(y.values[ts_idx], m_cv.predict(Xf_ts_s)))
+        m_cv = PySRRegressor(
+            niterations=40,
+            binary_operators=["+", "-", "*", "/"],
+            unary_operators=["sqrt", "log", "square"],
+            random_state=42,
+            verbosity=0,
+        )
+        m_cv.fit(X.values[tr_idx], y.values[tr_idx])
+        cv_scores_sr.append(r2_score(y.values[ts_idx], m_cv.predict(X.values[ts_idx])))
     cv_scores_sr = np.array(cv_scores_sr)
 
     cv_all = {
