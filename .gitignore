@@ -21,3 +21,4 @@ __pycache__/
 # Generated outputs (track figures, ignore csv/models)
 outputs/csv/
 outputs/models/
+outputs/20260417_*
